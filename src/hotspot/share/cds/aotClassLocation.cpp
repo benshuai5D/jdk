@@ -629,11 +629,11 @@ void AOTClassLocationConfig::add_class_location(JavaThread* current, GrowableCla
         int n = os::snprintf(libname, libname_len + 1, "%.*s%s", dir_len, dir_name, file_start);
         assert((size_t)n == libname_len, "Unexpected number of characters in string");
 
-        // Avoid infinite recursion when two JAR files refer to each
-        // other via cpattr.
+        // Avoid infinite recursion when JAR files refer to each other through
+        // equivalent path names in their Class-Path attributes.
         bool found_duplicate = false;
         for (int i = boot_cp_start_index(); i < tmp_array.length(); i++) {
-          if (strcmp(tmp_array.at(i)->path(), libname) == 0) {
+          if (os::same_files(tmp_array.at(i)->path(), libname)) {
             found_duplicate = true;
             break;
           }
