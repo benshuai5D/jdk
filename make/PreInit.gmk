@@ -86,6 +86,14 @@ ifneq ($(SKIP_SPEC), true)
   # Check that CONF_CHECK is valid.
   $(eval $(call ParseConfCheckOption))
 
+  # doctor is a diagnostic target and should still run when the configuration
+  # is out of date. Do not disable the check for other targets invoked with it.
+  ifneq ($(filter doctor, $(CALLED_SPEC_TARGETS)), )
+    ifeq ($(filter-out doctor, $(CALLED_SPEC_TARGETS)), )
+      override CONF_CHECK := ignore
+    endif
+  endif
+
   # Check that the LOG given is valid, and set LOG_LEVEL, LOG_NOFILE,
   # MAKE_LOG_VARS and MAKE_LOG_FLAGS.
   $(eval $(call ParseLogLevel))

@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2022, 2025, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2022, 2026, Oracle and/or its affiliates. All rights reserved.
 # DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
 #
 # This code is free software; you can redistribute it and/or modify it
@@ -23,7 +23,19 @@
 # questions.
 #
 
-include MakeFileStart.gmk
+ifeq ($(DOCTOR_WITHOUT_CONFIG), true)
+  # Without a configuration, use the basic tools available in the shell.
+  GIT := $(shell command -v git 2>/dev/null)
+  ECHO := echo
+  GREP := grep
+  CUT := cut
+  TR := tr
+  TARGETS :=
+  IS_WINDOWS := $(if $(filter Windows_NT,$(OS)),true,false)
+else
+  include MakeFileStart.gmk
+  IS_WINDOWS := $(call isBuildOs, windows)
+endif
 
 ################################################################################
 # Help user diagnose possible errors and problems with the build environment.
@@ -38,7 +50,11 @@ TARGETS += prologue
 
 check-git: prologue
 	$(ECHO)
+        ifeq ($(DOCTOR_WITHOUT_CONFIG), true)
+	  $(ECHO) '* Verifying that git is available...'
+        else
 	$(ECHO) '* Verifying that configure has picked up git...'
+        endif
         ifeq ($(GIT), )
 	  $(ECHO) 'WARNING: "git" is not present. This will disable several checks.'
 	  $(ECHO) '! Correct by installing git and verifying that it is in the PATH'
@@ -52,7 +68,7 @@ endif
 
 check-autocrlf: check-git
         ifneq ($(GIT), )
-          ifeq ($(call isBuildOs, windows), true)
+          ifeq ($(IS_WINDOWS), true)
 	    $(ECHO)
 	    $(ECHO) '* Verifying git core.autocrlf value...'
             ifneq ($(AUTOCRLF), false)
@@ -65,6 +81,10 @@ check-autocrlf: check-git
 TARGETS += check-autocrlf
 
 check-configure-warnings: check-autocrlf
+        ifeq ($(DOCTOR_WITHOUT_CONFIG), true)
+	  $(ECHO)
+	  $(ECHO) '* Skipping configure warning checks (no configuration found).'
+        else
 	$(ECHO)
 	$(ECHO) '* Checking for warnings from configure...'
 	warning_output=`$(GREP) -e "^\* Memory limit:" -A 300 $(OUTPUTDIR)/configure.log | $(TAIL) -n +3 | $(SED) -e '$(DOLLAR){/^$(DOLLAR)/d;}'` && \
@@ -74,6 +94,7 @@ check-configure-warnings: check-autocrlf
 	  $(ECHO) ' ---' ; \
 	  $(ECHO) '! Inspect the warnings, fix any problems, and re-run configure' ; \
 	fi
+        endif
 
 TARGETS += check-configure-warnings
 
@@ -116,6 +137,13 @@ TARGETS += check-bad-file-names
 
 epilogue: check-bad-file-names
 	$(ECHO)
+        ifeq ($(DOCTOR_WITHOUT_CONFIG), true)
+	$(ECHO) '* No build configuration was found. Create one using:'
+	$(ECHO) ' ---' ; \
+	$(ECHO) bash configure
+	$(ECHO) ' ---' ; \
+	$(ECHO)
+        else
 	$(ECHO) '* If all else fails, try removing the entire build directory and re-creating'
 	$(ECHO) 'the same configuration using:'
 	$(ECHO) ' ---' ; \
@@ -124,6 +152,7 @@ epilogue: check-bad-file-names
 	$(ECHO) bash configure \$$configure_command_line
 	$(ECHO) ' ---' ; \
 	$(ECHO)
+        endif
 	$(ECHO) '* The build README (doc/building.md) is a great source of information,'
 	$(ECHO) 'especially the chapter "Fixing Unexpected Build Failures". Check it out!'
 	$(ECHO)
@@ -142,4 +171,8 @@ all: doctor
 
 ################################################################################
 
-include MakeFileEnd.gmk
+ifeq ($(DOCTOR_WITHOUT_CONFIG), true)
+  .SILENT: doctor $(TARGETS)
+else
+  include MakeFileEnd.gmk
+endif
