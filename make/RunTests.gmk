@@ -543,7 +543,9 @@ define SetupRunGtestTestBody
 	$$(call LogWarn, Finished running test '$$($1_TEST)')
 	$$(call LogWarn, Test report is stored in $$(strip \
 	    $$(subst $$(TOPDIR)/, , $$($1_TEST_RESULTS_DIR))))
-	$$(if $$(wildcard $$($1_RESULT_FILE)), \
+	$$(if $$(and $$(wildcard $$($1_RESULT_FILE)), \
+	    $$(wildcard $$($1_EXITCODE))), \
+	  $$(eval $1_EXIT_CODE := $$(shell $$(CAT) $$($1_EXITCODE))) \
 	  $$(eval $1_RUN := $$(shell $$(AWK) \
 	      '/==========.* tests? from .* test (cases?|suites?) ran/ { print $$$$2 }' \
 	      $$($1_RESULT_FILE))) \
@@ -566,6 +568,16 @@ define SetupRunGtestTestBody
 	      $$(EXPR) $$($1_RUN) - $$($1_PASSED) - $$($1_FAILED) - $$($1_GTEST_SKIPPED))) \
 	  $$(eval $1_TOTAL := $$(shell \
 	      $$(EXPR) $$($1_RUN) + $$($1_GTEST_DISABLED))) \
+	  $$(if $$(and $$(filter 0, $$($1_FAILED)), \
+	      $$(filter 0, $$($1_ERROR)), $$(filter-out 0, $$($1_EXIT_CODE))), \
+	    $$(eval $1_ERROR := 1) \
+	    $$(eval $1_TOTAL := $$(shell $$(EXPR) $$($1_TOTAL) + 1)) \
+	  ) \
+	  $$(if $$(and $$(filter 0, $$($1_RUN)), \
+	      $$(filter 0, $$($1_ERROR))), \
+	    $$(eval $1_ERROR := 1) \
+	    $$(eval $1_TOTAL := $$(shell $$(EXPR) $$($1_TOTAL) + 1)) \
+	  ) \
 	, \
 	  $$(eval $1_PASSED := 0) \
 	  $$(eval $1_FAILED := 0) \
