@@ -45,19 +45,3 @@ foo.tbd=11
 foo.tbd=12
 #endif
 crypto.policy=crypto.policydir-tbd
-
-package.access=sun.,\
-#ifdef solaris
-               solaris.,\
-#endif
-#ifdef macosx
-               apple.,\
-#endif
-
-package.definition=sun.,\
-#ifdef solaris
-                   solaris.,\
-#endif
-#ifdef macosx
-                   apple.,\
-#endif

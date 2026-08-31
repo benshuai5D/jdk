@@ -33,21 +33,10 @@ import java.util.*;
 /**
  * Builds the java.security file, including
  *
- * 1. Adds additional packages to the package.access and
- *    package.definition security properties.
- * 2. Filter out platform-unrelated parts.
- * 3. Set the JCE jurisdiction policy directory.
- *
- * In order to easily maintain platform-related entries, every item
- * (including the last line) in package.access and package.definition
- * MUST end with ',\'. A blank line MUST exist after the last line.
+ * 1. Filter out platform-unrelated parts.
+ * 2. Set the JCE jurisdiction policy directory.
  */
 public class MakeJavaSecurity {
-
-    private static final String PKG_ACC = "package.access";
-    private static final String PKG_DEF = "package.definition";
-    private static final int PKG_ACC_INDENT = 15;
-    private static final int PKG_DEF_INDENT = 19;
 
     public static void main(String[] args) throws Exception {
 
@@ -57,35 +46,19 @@ public class MakeJavaSecurity {
                                "[output java.security file name] " +
                                "[openjdk target os] " +
                                "[openjdk target cpu architecture]" +
-                               "[JCE jurisdiction policy directory]" +
-                               "[more restricted packages file name?]");
+                               "[JCE jurisdiction policy directory]");
 
                     System.exit(1);
         }
 
-        // more restricted packages
-        List<String> extraLines;
-        if (args.length == 6) {
-            extraLines = Files.readAllLines(Paths.get(args[5]));
-        } else {
-            extraLines = Collections.emptyList();
-        }
-
         List<String> lines = new ArrayList<>();
 
-        // read raw java.security and add more restricted packages
+        // read raw java.security
         try (FileReader fr = new FileReader(args[0]);
                 BufferedReader br = new BufferedReader(fr)) {
-            // looking for pkg access properties
             String line = br.readLine();
             while (line != null) {
-                if (line.startsWith(PKG_ACC)) {
-                    addPackages(br, lines, line, PKG_ACC_INDENT, extraLines);
-                } else if (line.startsWith(PKG_DEF)) {
-                    addPackages(br, lines, line, PKG_DEF_INDENT, extraLines);
-                } else {
-                    lines.add(line);
-                }
+                lines.add(line);
                 line = br.readLine();
             }
         }
@@ -147,52 +120,6 @@ public class MakeJavaSecurity {
             }
         }
 
-        // Clean up the last line of PKG_ACC and PKG_DEF blocks.
-        // Not really necessary since a blank line follows.
-        boolean inBlock = false;
-        for (int i=0; i<lines.size(); i++) {
-            String line = lines.get(i);
-            if (line.startsWith(PKG_ACC) || line.startsWith(PKG_DEF)) {
-                inBlock = true;
-            }
-            if (inBlock) {
-                if (line.isEmpty()) {
-                    String lastLine = lines.get(i-1);
-                    lines.set(i-1, lastLine.substring(0, lastLine.length()-2));
-                    inBlock = false;
-                }
-            }
-        }
-
         Files.write(Paths.get(args[1]), lines);
-    }
-
-    private static void addPackages(BufferedReader br, List<String> lines,
-                                    String line, int numSpaces,
-                                    List<String> args) throws IOException {
-        // parse property until EOL, not including line breaks
-        boolean first = true;
-        while (line != null && !line.isEmpty()) {
-            if (!line.startsWith("#")) {
-                if (!line.endsWith(",\\") ||
-                        (!first && line.contains("="))) {
-                    throw new IOException("Invalid line: " + line);
-                }
-            }
-            lines.add(line);
-            line = br.readLine();
-            first = false;
-        }
-        // add new packages, one per line
-        for (String arg: args) {
-            if (arg.startsWith("#")) {
-                lines.add(arg);
-            } else {
-                lines.add(String.format("%"+numSpaces+"s", "") + arg + ",\\");
-            }
-        }
-        if (line != null) {
-            lines.add(line);
-        }
     }
 }

@@ -35,7 +35,7 @@ import jdk.test.lib.Asserts;
 
 /**
  * @test
- * @bug 8141690
+ * @bug 8141690 8381441
  * @summary MakeJavaSecurity.java functions
  * @library /test/lib /test/jdk
  * @run main MakeJavaSecurityTest
@@ -53,8 +53,7 @@ public class MakeJavaSecurityTest {
                 "outfile",
                 "solaris",
                 "sparc",
-                "somepolicy",
-                TEST_SRC + "/more_restricted");
+                "somepolicy");
 
         OutputAnalyzer output = new OutputAnalyzer(pb.start());
         output.shouldHaveExitValue(0);
