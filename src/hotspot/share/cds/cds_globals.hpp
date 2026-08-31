@@ -168,6 +168,9 @@
                                                                             \
   develop(bool, TestAOTAdapterLinkFailure, false,                           \
           "Test failure of adapter linking when loading from AOT cache.")   \
+                                                                            \
+  product(bool, SkipSharedClassPathCheck, false, DIAGNOSTIC,                \
+          "Skip shared class path validation for CDS archives")            \
 
 // end of CDS_FLAGS
 
