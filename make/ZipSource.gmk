@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2014, 2025, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2014, 2026, Oracle and/or its affiliates. All rights reserved.
 # DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
 #
 # This code is free software; you can redistribute it and/or modify it
@@ -36,6 +36,8 @@ $(if $(filter $(TOPDIR)/%, $(SUPPORT_OUTPUTDIR)), $(eval SRC_ZIP_BASE := $(TOPDI
 ################################################################################
 # Create the directory structure for src.zip using symlinks.
 #   <module>/<package>/<file>.java
+# and include documentation resources as:
+#   <module>/<package>/doc-files/<file>
 # or:
 #   <module>/META-INF/preview/<package>/<file>.java
 # for preview enabled sources.
@@ -74,6 +76,10 @@ $(foreach m, $(ALL_MODULES), \
     ) \
     $(eval SRC_ZIP_SRCS += $$($d_TARGET)) \
     $(eval SRC_ZIP_SRCS_$m += $$($d_TARGET)) \
+    $(if $(SRC_GENERATED), \
+      $(eval SRC_ZIP_INCLUDE_FILES += $(patsubst $d/%, $m/%, \
+          $(call containing, /doc-files/, $(call FindFiles, $d)))) \
+    ) \
   ) \
 )
 
@@ -113,6 +119,8 @@ TARGETS += $(SRC_ZIP_SRCS)
 # Only evaluate the creation of src.zip in a sub make call when the symlinked
 # src directory structure has been generated.
 ifeq ($(SRC_GENERATED), true)
+
+  SRC_ZIP_INCLUDE_FILES := $(sort $(SRC_ZIP_INCLUDE_FILES))
 
   # Rewrite the EXCLUDE_TRANSLATIONS locales as exclude patters for java files
   TRANSLATIONS_PATTERN := $(addprefix %_, $(addsuffix .java, $(EXCLUDE_TRANSLATIONS)))

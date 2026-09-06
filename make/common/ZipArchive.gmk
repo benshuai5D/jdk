@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2011, 2025, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2011, 2026, Oracle and/or its affiliates. All rights reserved.
 # DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
 #
 # This code is free software; you can redistribute it and/or modify it
@@ -40,7 +40,7 @@ include $(TOPDIR)/make/ToolsJdk.gmk
 #   SRC
 #   ZIP
 #   INCLUDES
-#   INCLUDE_FILES
+#   INCLUDE_FILES - List of files to include regardless of suffix match.
 #   EXCLUDES
 #   EXCLUDE_FILES
 #   EXCLUDE_PATTERNS - Patterns with at most one % wildcard matching filenames
@@ -60,12 +60,20 @@ define SetupZipArchiveBody
   # Create a version $1_SRC with a guaranteed trailing slash
   $1_SRC_SLASH := $$(addsuffix /, $$(patsubst %/, %, $$($1_SRC)))
 
+  # Resolve explicitly included files in all source directories.
+  $1_INCLUDE_FILE_SRCS := $$(wildcard $$(foreach s, $$($1_SRC_SLASH), \
+      $$(addprefix $$s, $$($1_INCLUDE_FILES))))
+
   # To avoid running find over too large sets of files, which causes make to crash
-  # on some configurations (cygwin), use INCLUDES and INCLUDE_FILES to build a set
-  # of directories to run find in, if available.
-  ifneq ($$($1_INCLUDES)$$($1_INCLUDE_FILES), )
+  # on some configurations (cygwin), use INCLUDES to build a set of directories
+  # to run find in, if available.
+  ifneq ($$($1_INCLUDES), )
     $1_FIND_LIST := $$(wildcard $$(foreach s, $$($1_SRC_SLASH), \
-        $$(addprefix $$s, $$($1_INCLUDES) $$($1_INCLUDE_FILES))))
+        $$(addprefix $$s, $$($1_INCLUDES))))
+  else ifneq ($$($1_SUFFIXES), )
+    $1_FIND_LIST := $$($1_SRC_SLASH)
+  else ifneq ($$($1_INCLUDE_FILES), )
+    $1_FIND_LIST := $$($1_INCLUDE_FILE_SRCS)
   else
     $1_FIND_LIST := $$($1_SRC_SLASH)
   endif
@@ -83,6 +91,8 @@ define SetupZipArchiveBody
   ifneq ($$($1_SUFFIXES), )
     $1_ALL_SRCS := $$(filter $$(addprefix %, $$($1_SUFFIXES)), $$($1_ALL_SRCS))
   endif
+
+  $1_ALL_SRCS := $$(sort $$($1_ALL_SRCS) $$($1_INCLUDE_FILE_SRCS))
 
   ifneq ($$($1_INCLUDES), )
     ifneq ($$($1_SUFFIXES), )
