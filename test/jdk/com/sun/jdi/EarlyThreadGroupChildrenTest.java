@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2025, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -23,12 +23,13 @@
 
 /**
  * @test
- * @bug 8352088
+ * @bug 8352088 8352759
  * @summary If ThreadGroupReference.groups() is called very early on from an
  *          event handler, it can cause a deadlock because the call can result
  *          in ClassPrepareEvents, which the debug agent will block on until
  *          the debugger handles them, which it won't because the event handler
  *          thread is waiting for a reply to ThreadGroupReference.groups().
+ *          The event thread must remain suspended until all listeners handle the event.
  *
  * @run build TestScaffold VMConnection TargetListener TargetAdapter
  * @run compile -g EarlyThreadGroupChildrenTest.java
@@ -73,6 +74,19 @@ public class EarlyThreadGroupChildrenTest extends TestScaffold {
     }
 
     static volatile int classPreparedCount = 0;
+    int suspensionChecks;
+    boolean eventSetCompleteCalled;
+
+    @Override
+    public void eventSetReceived(EventSet set) {
+        eventSetCompleteCalled = false;
+    }
+
+    @Override
+    public void eventSetComplete(EventSet set) {
+        eventSetCompleteCalled = true;
+        super.eventSetComplete(set);
+    }
 
     @Override
     public void classPrepared(ClassPrepareEvent event) {
@@ -109,6 +123,23 @@ public class EarlyThreadGroupChildrenTest extends TestScaffold {
         // will be resumed after handling the VMStartEvent, and we don't want it resumed.
         addListener(this);
 
+        // All listeners must handle the event before any completion callback resumes it.
+        addListener(new TargetAdapter() {
+            @Override
+            public void classPrepared(ClassPrepareEvent event) {
+                if (eventSetCompleteCalled) {
+                    failure("EventSet completion preceded ClassPrepare callback");
+                }
+                ThreadReference thread = event.thread();
+                if (thread != null) {
+                    suspensionChecks++;
+                    if (!thread.isSuspended()) {
+                        failure("ClassPrepareEvent thread resumed before all listeners handled it");
+                    }
+                }
+            }
+        });
+
         // Create a ThreadStartRequest for the first ThreadStartEvent. When this event is
         // received, we will enable ClassPrepareEvents.
         tsRequest = eventRequestManager().createThreadStartRequest();
@@ -118,7 +149,9 @@ public class EarlyThreadGroupChildrenTest extends TestScaffold {
 
         resumeToVMDisconnect();
 
-        // Failure mode for this test is deadlocking, so there is no error to check for.
+        if (testFailed || suspensionChecks == 0) {
+            throw new RuntimeException("EarlyThreadGroupChildrenTest failed");
+        }
         System.out.println("EarlyThreadGroupChildrenTest: passed");
     }
 }

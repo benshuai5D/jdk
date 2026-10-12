@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2001, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -68,6 +68,7 @@ abstract public class TestScaffold extends TargetAdapter {
     boolean vmDisconnected = false;
     final String[] args;
     protected boolean testFailed = false;
+    private Exception eventHandlerException;
     protected long startTime;
 
     static private class ArgInfo {
@@ -288,15 +289,21 @@ abstract public class TestScaffold extends TargetAdapter {
                                     }
                                 }
                                 traceln("TS: eventHandler:   end of events loop");
-                                if (!listener.shouldRemoveListener()) {
-                                    traceln("TS: eventHandler:   calling ESC");
-                                    listener.eventSetComplete(set);
-                                    if (listener.shouldRemoveListener()) {
-                                        iter.remove();
-                                    }
-                                }
                             }
                             traceln("TS: eventHandler: end of listeners loop");
+                        }
+
+                        // Completion callbacks may resume the target. Deliver all events first.
+                        iter = listeners.listIterator();
+                        while (iter.hasNext()) {
+                            TargetListener listener = (TargetListener)iter.next();
+                            if (!listener.shouldRemoveListener()) {
+                                traceln("TS: eventHandler:   calling ESC");
+                                listener.eventSetComplete(set);
+                            }
+                            if (listener.shouldRemoveListener()) {
+                                iter.remove();
+                            }
                         }
                     }
                 } catch (InterruptedException e) {
@@ -306,6 +313,7 @@ abstract public class TestScaffold extends TargetAdapter {
                     e.printStackTrace();
                     connected = false;
                     synchronized(TestScaffold.this) {
+                        eventHandlerException = e;
                         // This will make the waiters such as waitForVMDisconnect
                         // exit their wait loops.
                         vmDisconnected = true;
@@ -782,6 +790,10 @@ abstract public class TestScaffold extends TargetAdapter {
                 wait();
             } catch (InterruptedException e) {
             }
+        }
+
+        if (eventHandlerException != null) {
+            throw new RuntimeException("Exception in event handler", eventHandlerException);
         }
 
         // Make sure debuggee exits with no errors. Otherwise failures might go unnoticed.
