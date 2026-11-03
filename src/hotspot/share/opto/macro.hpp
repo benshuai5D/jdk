@@ -146,6 +146,10 @@ private:
                                        RegionNode** exit_block, Node** result_memory, Node* length,
                                        Node* src_start, Node* dst_start, BasicType type);
 
+  bool generate_small_scalar_arraycopy(Node* ctrl, MergeMemNode** mem, const TypePtr* adr_type,
+                                       Node* length, Node* src_offset, Node* dst_offset,
+                                       Node* src_start, Node* dst_start);
+
   void generate_negative_guard(Node** ctrl, Node* index, RegionNode* region);
   void generate_limit_guard(Node** ctrl, Node* offset, Node* subseq_length, Node* array_length, RegionNode* region);
 

@@ -1238,6 +1238,69 @@ Node* PhaseMacroExpand::generate_generic_arraycopy(Node** ctrl, MergeMemNode** m
   return proj;
 }
 
+bool PhaseMacroExpand::generate_small_scalar_arraycopy(Node* ctrl, MergeMemNode** mem, const TypePtr* adr_type,
+                                                       Node* length, Node* src_offset, Node* dst_offset,
+                                                       Node* src_start, Node* dst_start) {
+#ifndef _LP64
+  return false;
+#else
+  // This path counts two 8-byte copy blocks, not individual byte elements.
+  if (ArrayCopyLoadStoreMaxElem < 2 || src_offset == nullptr || dst_offset == nullptr) {
+    return false;
+  }
+  intptr_t count = length->Opcode() == Op_ConvI2L ? _igvn.find_int_con(length->in(1), -1)
+                                               : _igvn.find_intptr_t_con(length, -1);
+  if (count != 2 * BytesPerLong) {
+    return false;
+  }
+
+  intptr_t src_index = _igvn.find_int_con(src_offset, -1);
+  intptr_t dst_index = _igvn.find_int_con(dst_offset, -1);
+  intptr_t header = arrayOopDesc::base_offset_in_bytes(T_BYTE);
+  if (src_index < 0 || dst_index < 0 ||
+      !is_aligned(header + src_index, BytesPerLong) || !is_aligned(header + dst_index, BytesPerLong)) {
+    return false;
+  }
+
+  const TypeAryPtr* src_type = _igvn.type(src_start)->isa_aryptr();
+  const TypeAryPtr* dst_type = _igvn.type(dst_start)->isa_aryptr();
+  if (src_type == nullptr || dst_type == nullptr || src_type->is_flat() || dst_type->is_flat() ||
+      src_type->elem()->array_element_basic_type() != T_BYTE ||
+      dst_type->elem()->array_element_basic_type() != T_BYTE) {
+    return false;
+  }
+
+  int src_alias = C->get_alias_index(src_type);
+  int dst_alias = C->get_alias_index(adr_type);
+  if (dst_alias != C->get_alias_index(dst_type)) {
+    return false;
+  }
+
+  Node* src_memory = (*mem)->memory_at(src_alias);
+  Node* src_base = src_start->is_AddP() ? src_start->in(AddPNode::Base) : src_start;
+  Node* dst_base = dst_start->is_AddP() ? dst_start->in(AddPNode::Base) : dst_start;
+  Node* values[2];
+  // Both loads use the original memory, including when the arrays overlap.
+  for (int i = 0; i < 2; i++) {
+    Node* addr = basic_plus_adr(src_base, src_start, i * BytesPerLong);
+    values[i] = transform_later(LoadNode::make(_igvn, ctrl, src_memory, addr,
+                                              src_type->add_offset(i * BytesPerLong), TypeLong::LONG, T_LONG,
+                                              MemNode::unordered, LoadNode::UnknownControl,
+                                              false /*require_atomic_access*/, false /*unaligned*/, true /*mismatched*/));
+  }
+
+  Node* dst_memory = (*mem)->memory_at(dst_alias);
+  for (int i = 0; i < 2; i++) {
+    Node* addr = basic_plus_adr(dst_base, dst_start, i * BytesPerLong);
+    StoreNode* store = StoreNode::make(_igvn, ctrl, dst_memory, addr, adr_type, values[i], T_LONG, MemNode::unordered);
+    store->set_mismatched_access();
+    dst_memory = transform_later(store);
+  }
+  (*mem)->set_memory_at(dst_alias, dst_memory);
+  return true;
+#endif
+}
+
 // Helper function; generates the fast out-of-line call to an arraycopy stub.
 void PhaseMacroExpand::generate_unchecked_arraycopy(Node** ctrl, MergeMemNode** mem,
                                                     const TypePtr* adr_type,
@@ -1270,6 +1333,11 @@ void PhaseMacroExpand::generate_unchecked_arraycopy(Node** ctrl, MergeMemNode** 
     Matcher::vector_width_in_bytes(basic_elem_type) >= 16) {
     generate_partial_inlining_block(ctrl, mem, adr_type, &exit_block, &result_memory,
                                     copy_length, src_start, dest_start, basic_elem_type);
+  }
+
+  if (exit_block == nullptr && basic_elem_type == T_BYTE && !dest_uninitialized && !raw_base &&
+      generate_small_scalar_arraycopy(*ctrl, mem, adr_type, copy_length, src_offset, dest_offset, src_start, dest_start)) {
+    return;
   }
 
   const TypeFunc* call_type = OptoRuntime::fast_arraycopy_Type();
